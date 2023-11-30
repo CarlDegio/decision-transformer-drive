@@ -57,6 +57,7 @@ def evaluate_on_env(model, device, context_len, env, rtg_target, rtg_scale,
 
     with torch.no_grad():
 
+        running_state, _ = env.reset()
         for _ in range(num_eval_ep):
 
             # zeros place holders
@@ -68,7 +69,7 @@ def evaluate_on_env(model, device, context_len, env, rtg_target, rtg_scale,
                                 dtype=torch.float32, device=device)
 
             # init episode
-            running_state,_ = env.reset()
+            # running_state,_ = env.reset()
             running_reward = 0
             running_rtg = rtg_target / rtg_scale
 
@@ -98,7 +99,7 @@ def evaluate_on_env(model, device, context_len, env, rtg_target, rtg_scale,
                     act = act_preds[0, -1].detach()
 
                 # running_state, running_reward, done, _ = env.step(act.cpu().numpy())
-                running_state, running_reward, terminated, truncated, _ = env.step(act.cpu().numpy())
+                running_state, running_reward, terminated, truncated, info = env.step(act.cpu().numpy())
 
                 # add action in placeholder
                 actions[0, t] = act
@@ -107,7 +108,8 @@ def evaluate_on_env(model, device, context_len, env, rtg_target, rtg_scale,
 
                 if render:
                     env.render()
-                if terminated or truncated:
+                if (terminated or truncated):
+                    running_state, _ = env.reset(env.current_seed + 1)
                     break
 
     results['eval/avg_reward'] = total_reward / num_eval_ep

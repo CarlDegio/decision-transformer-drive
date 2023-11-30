@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 
 from decision_transformer.utils import D4RLTrajectoryDataset, evaluate_on_env, get_d4rl_normalized_score
 from decision_transformer.model import DecisionTransformer
-from MetaDriveExtEnv import MetaDriveInfoEnv
+from metadrive import SafeMetaDriveEnv
 
 
 def train(args):
@@ -23,18 +23,30 @@ def train(args):
 
     if args.env == 'MetaDriveInfoEnv':
         env_name = 'MetaDriveInfoEnv'
-        rtg_target = 500
-        env_d4rl_name = f'data_compose'
+        rtg_target = 350
+        env_d4rl_name = f'expert_dataset'
         drive_test_config = dict(
-            num_scenarios=100,
-            start_seed=1000,
-            random_traffic=False,
-            traffic_density=0.2,
-            horizon=1000,
+            use_render=False,
+            manual_control=False,
+            traffic_density=0.1,
+            num_scenarios=3000,
+            start_seed=5000,
+            random_agent_model=False,
             random_lane_width=True,
             random_lane_num=True,
-            out_of_route_done=True)
-        env = MetaDriveInfoEnv(drive_test_config)
+            random_traffic=True,
+
+            on_continuous_line_done=False,
+            out_of_route_done=False,
+            crash_vehicle_done=False,
+            crash_object_done=False,
+
+            vehicle_config=dict(show_lidar=True, show_navi_mark=False),
+            accident_prob=0.0,
+            horizon=1000,
+
+        )
+        env = SafeMetaDriveEnv(drive_test_config)
     else:
         raise NotImplementedError
 
@@ -177,7 +189,7 @@ def train(args):
 
         # evaluate action accuracy
         results = evaluate_on_env(model, device, context_len, env, rtg_target, rtg_scale,
-                                  num_eval_ep, max_eval_ep_len, state_mean, state_std)
+                                  num_eval_ep, max_eval_ep_len, state_mean, state_std)#render=True)
 
         eval_avg_reward = results['eval/avg_reward']
         eval_avg_ep_len = results['eval/avg_ep_len']
@@ -213,8 +225,8 @@ def train(args):
         #     torch.save(model.state_dict(), save_best_model_path)
         #     max_d4rl_score = eval_d4rl_score
 
-        print("saving current model at: " + save_model_path)
-        torch.save(model.state_dict(), save_model_path)
+        # print("saving current model at: " + save_model_path)
+        # torch.save(model.state_dict(), save_model_path)
 
     print("=" * 60)
     print("finished training!")
@@ -255,7 +267,7 @@ if __name__ == "__main__":
     parser.add_argument('--wt_decay', type=float, default=1e-4)
     parser.add_argument('--warmup_steps', type=int, default=10000)
 
-    parser.add_argument('--max_train_iters', type=int, default=200)
+    parser.add_argument('--max_train_iters', type=int, default=100)
     parser.add_argument('--num_updates_per_iter', type=int, default=100)
 
     parser.add_argument('--device', type=str, default='cuda')

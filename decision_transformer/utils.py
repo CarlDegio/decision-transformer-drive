@@ -4,6 +4,8 @@ import pickle
 import torch
 import numpy as np
 from torch.utils.data import Dataset
+from util.trajectory import WaypointTrajectory
+from dataset_gen.expert_dataset_traj_gen import denorm_action
 from decision_transformer.d4rl_infos import REF_MIN_SCORE, REF_MAX_SCORE, D4RL_DATASET_STATS
 
 
@@ -27,7 +29,7 @@ def get_d4rl_dataset_stats(env_d4rl_name):
 
 def evaluate_on_env(model, device, context_len, env, rtg_target, rtg_scale,
                     num_eval_ep=10, max_test_ep_len=1000,
-                    state_mean=None, state_std=None, render=False):
+                    state_mean=None, state_std=None, render=False, drawer=None):
 
     eval_batch_size = 1  # required for forward pass
 
@@ -36,7 +38,7 @@ def evaluate_on_env(model, device, context_len, env, rtg_target, rtg_scale,
     total_timesteps = 0
 
     state_dim = env.observation_space.shape[0]
-    act_dim = env.action_space.shape[0]
+    act_dim = env.action_space['extra'].shape[0]
 
     if state_mean is None:
         state_mean = torch.zeros((state_dim,)).to(device)
@@ -58,6 +60,7 @@ def evaluate_on_env(model, device, context_len, env, rtg_target, rtg_scale,
     with torch.no_grad():
 
         running_state, _ = env.reset()
+        traj = WaypointTrajectory()
         for _ in range(num_eval_ep):
 
             # zeros place holders
@@ -97,9 +100,14 @@ def evaluate_on_env(model, device, context_len, env, rtg_target, rtg_scale,
                                                 actions[:,t-context_len+1:t+1],
                                                 rewards_to_go[:,t-context_len+1:t+1])
                     act = act_preds[0, -1].detach()
-
+                relative_waypoint=np.cumsum(denorm_action(act.cpu().numpy().reshape((9,2))), axis=0)
+                traj.set_local_waypoint(relative_waypoint, env.vehicle.position, env.vehicle.heading_theta)
+                traj.draw_in_sim(drawer)
                 # running_state, running_reward, done, _ = env.step(act.cpu().numpy())
-                running_state, running_reward, terminated, truncated, info = env.step(act.cpu().numpy())
+                # running_state, running_reward, terminated, truncated, info = env.step(act.cpu().numpy())
+                running_state, running_reward, terminated, truncated, info = env.step({"action": np.array([0,0]),
+                                                                        "extra": relative_waypoint.reshape(-1)})
+                running_reward=running_reward*9
 
                 # add action in placeholder
                 actions[0, t] = act
